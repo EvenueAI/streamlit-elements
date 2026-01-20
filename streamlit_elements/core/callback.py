@@ -3,10 +3,13 @@ import json
 import re
 
 from streamlit import session_state
-from streamlit.components.v1 import components
+from streamlit.components.v1 import custom_component as components
 from typing import Callable
 
 from streamlit_elements.core.exceptions import ElementsFrontendError
+
+# Patched for Streamlit >= 1.34 (components import) and >= 1.39 (callback key routing)
+# See: known compatibility issues with streamlit-elements 0.1.0
 
 CALLBACK_KEY = f"{__name__}.elements_callback_manager"
 FORBIDDEN_PARAM_CHAR_RE = re.compile("\W+")
@@ -15,6 +18,17 @@ FORBIDDEN_PARAM_CHAR_RE = re.compile("\W+")
 def _patch_register_widget(register_widget):
     def wrapper_register_widget(*args, **kwargs):
         user_key = kwargs.get("user_key", None)
+        try:
+            user_key = None
+            new_callback_data = kwargs[
+                "ctx"
+            ].session_state._state._new_session_state.get(
+                "streamlit_elements.core.frame.elements_frame", None
+            )
+            if new_callback_data is not None:
+                user_key = new_callback_data._key
+        except Exception:
+            pass
         callbacks = session_state.get(CALLBACK_KEY, None)
 
         # Check if a callback was registered for that user_key.
